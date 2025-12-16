@@ -3,42 +3,42 @@ import { LyricSegment, AnimationType, FontFamily, BackgroundEffect } from '../ty
 
 // Helper: Decode Audio File manually if not provided (retained for fallback analysis if needed, though less critical now)
 const decodeAudioFromFile = async (file: File): Promise<AudioBuffer> => {
-    const arrayBuffer = await file.arrayBuffer();
-    const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
-    try {
-        const decoded = await audioContext.decodeAudioData(arrayBuffer);
-        return decoded;
-    } finally {
-        audioContext.close();
-    }
+  const arrayBuffer = await file.arrayBuffer();
+  const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+  try {
+    const decoded = await audioContext.decodeAudioData(arrayBuffer);
+    return decoded;
+  } finally {
+    audioContext.close();
+  }
 };
 
 // --- Main Logic ---
 
 const fileToGenerativePart = async (
-  file: File, 
+  file: File,
   onProgress: (status: string) => void
 ): Promise<{ inlineData: { data: string; mimeType: string } }> => {
-  
+
   onProgress("データをエンコード中...");
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onloadend = () => {
       const base64Data = reader.result as string;
       if (!base64Data) {
-          reject(new Error("Failed to read file data"));
-          return;
+        reject(new Error("Failed to read file data"));
+        return;
       }
       const base64Content = base64Data.split(',')[1];
-      
+
       // Fix common mime-types for API compatibility
       let mimeType = file.type;
       if (mimeType === 'audio/mp3') mimeType = 'audio/mpeg';
-      
+
       resolve({
         inlineData: {
           data: base64Content,
-          mimeType: mimeType, 
+          mimeType: mimeType,
         },
       });
     };
@@ -48,21 +48,22 @@ const fileToGenerativePart = async (
 };
 
 export const generateLyricsFromVideo = async (
+  apiKey: string,
   mediaFile: File,
   referenceLyrics?: string,
   preDecodedAudio?: AudioBuffer | null,
-  onProgress: (status: string) => void = () => {}
+  onProgress: (status: string) => void = () => { }
 ): Promise<LyricSegment[]> => {
   try {
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-    
+    const ai = new GoogleGenAI({ apiKey });
+
     onProgress("ファイル準備中...");
-    
+
     // Simply upload the raw file. Gemini Flash 2.0 handles MP3/WAV/AAC natively and robustly.
     const mediaPart = await fileToGenerativePart(mediaFile, onProgress);
-    
+
     onProgress("AIが楽曲を聴取・同期中...");
-    
+
     let prompt = "";
 
     // ユーザーの意図に合わせてプロンプトを分岐
@@ -104,7 +105,7 @@ export const generateLyricsFromVideo = async (
     }
 
     const response = await ai.models.generateContent({
-      model: "gemini-2.0-flash-exp", 
+      model: "gemini-2.0-flash-exp",
       contents: {
         parts: [
           mediaPart,
@@ -115,10 +116,10 @@ export const generateLyricsFromVideo = async (
         responseMimeType: "application/json",
         // 安全設定を無効化（歌詞には過激な表現が含まれる可能性があるため）
         safetySettings: [
-            { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
-            { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
-            { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
-            { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+          { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
+          { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+          { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
+          { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
         ],
         responseSchema: {
           type: Type.OBJECT,
@@ -134,11 +135,11 @@ export const generateLyricsFromVideo = async (
                   style: {
                     type: Type.OBJECT,
                     properties: {
-                       animation: { type: Type.STRING },
-                       fontSize: { type: Type.STRING },
-                       fontFamily: { type: Type.STRING },
-                       color: { type: Type.STRING },
-                       backgroundEffect: { type: Type.STRING } 
+                      animation: { type: Type.STRING },
+                      fontSize: { type: Type.STRING },
+                      fontFamily: { type: Type.STRING },
+                      color: { type: Type.STRING },
+                      backgroundEffect: { type: Type.STRING }
                     }
                   }
                 },
@@ -151,7 +152,7 @@ export const generateLyricsFromVideo = async (
     });
 
     onProgress("タイムライン構築中...");
-    
+
     // --- JSON Cleaning ---
     let jsonText = response.text || "";
     jsonText = jsonText.replace(/```json/g, '').replace(/```/g, '').trim();
@@ -160,30 +161,30 @@ export const generateLyricsFromVideo = async (
 
     let parsed;
     try {
-        parsed = JSON.parse(jsonText);
+      parsed = JSON.parse(jsonText);
     } catch (e) {
-        console.error("JSON Parse Error:", e, jsonText);
-        // Fallback: try to find the array bracket
-        const start = jsonText.indexOf('{');
-        const end = jsonText.lastIndexOf('}');
-        if (start !== -1 && end !== -1) {
-            try {
-                parsed = JSON.parse(jsonText.substring(start, end + 1));
-            } catch (e2) {
-                throw new Error("AIの応答をJSONとして解析できませんでした。");
-            }
-        } else {
-            throw new Error("AIの応答が無効な形式です。");
+      console.error("JSON Parse Error:", e, jsonText);
+      // Fallback: try to find the array bracket
+      const start = jsonText.indexOf('{');
+      const end = jsonText.lastIndexOf('}');
+      if (start !== -1 && end !== -1) {
+        try {
+          parsed = JSON.parse(jsonText.substring(start, end + 1));
+        } catch (e2) {
+          throw new Error("AIの応答をJSONとして解析できませんでした。");
         }
+      } else {
+        throw new Error("AIの応答が無効な形式です。");
+      }
     }
-    
+
     const validateEnum = (val: string, enumObj: any, defaultVal: any) => {
       if (!val) return defaultVal;
       const normalized = val.toLowerCase().replace(/-/g, '').replace(/_/g, '');
-      const match = Object.values(enumObj).find((e: any) => 
+      const match = Object.values(enumObj).find((e: any) =>
         e.toLowerCase().replace(/-/g, '').replace(/_/g, '') === normalized
       );
-      return match || val; 
+      return match || val;
     };
 
     const rawLyrics = (parsed.lyrics || []).map((l: any, index: number) => {
@@ -211,23 +212,23 @@ export const generateLyricsFromVideo = async (
     rawLyrics.sort((a: any, b: any) => a.startTime - b.startTime);
 
     const validLyrics: LyricSegment[] = [];
-    
-    for (let i = 0; i < rawLyrics.length; i++) {
-        const current = rawLyrics[i];
-        
-        // Skip invalid duration
-        if (current.endTime <= current.startTime) continue;
 
-        // Fix overlaps with next lyric
-        if (i < rawLyrics.length - 1) {
-            const next = rawLyrics[i + 1];
-            if (current.endTime > next.startTime) {
-                // Strategy: Trim current to end exactly where next starts
-                current.endTime = next.startTime;
-            }
+    for (let i = 0; i < rawLyrics.length; i++) {
+      const current = rawLyrics[i];
+
+      // Skip invalid duration
+      if (current.endTime <= current.startTime) continue;
+
+      // Fix overlaps with next lyric
+      if (i < rawLyrics.length - 1) {
+        const next = rawLyrics[i + 1];
+        if (current.endTime > next.startTime) {
+          // Strategy: Trim current to end exactly where next starts
+          current.endTime = next.startTime;
         }
-        
-        validLyrics.push(current);
+      }
+
+      validLyrics.push(current);
     }
 
     return validLyrics;
@@ -243,22 +244,23 @@ export const generateLyricsFromVideo = async (
  * NOTE: Background effects are explicitly excluded from generation.
  */
 export const analyzeMoodAndStyle = async (
+  apiKey: string,
   lyrics: LyricSegment[],
   onProgress: (status: string) => void
-): Promise<{ 
-    updatedLyrics: LyricSegment[]
+): Promise<{
+  updatedLyrics: LyricSegment[]
 }> => {
-    if (!lyrics || lyrics.length === 0) return { updatedLyrics: [] };
-    
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-    
-    const simplifiedLyrics = lyrics.map((l, i) => ({
-        id: l.id,
-        text: l.text,
-        duration: l.endTime - l.startTime
-    }));
+  if (!lyrics || lyrics.length === 0) return { updatedLyrics: [] };
 
-    const prompt = `
+  const ai = new GoogleGenAI({ apiKey });
+
+  const simplifiedLyrics = lyrics.map((l, i) => ({
+    id: l.id,
+    text: l.text,
+    duration: l.endTime - l.startTime
+  }));
+
+  const prompt = `
     Role: Professional Music Video Director.
     Task: Assign Kinetic Typography styles (Animation, Font, Color) for EACH line based on the mood.
     
@@ -270,76 +272,76 @@ export const analyzeMoodAndStyle = async (
     Return JSON with "styles": Array of { id, animation, font, color }.
     `;
 
-    onProgress("AIが楽曲ムードとテキスト演出を分析中...");
+  onProgress("AIが楽曲ムードとテキスト演出を分析中...");
 
-    let responseText = "";
-    
-    try {
-        const response = await ai.models.generateContent({
-            model: "gemini-2.0-flash-exp",
-            contents: [
-                { text: JSON.stringify(simplifiedLyrics) },
-                { text: prompt }
-            ],
-            config: {
-                responseMimeType: "application/json",
-                safetySettings: [
-                    { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
-                    { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
-                    { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
-                    { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
-                ],
-                responseSchema: {
-                    type: Type.OBJECT,
-                    properties: {
-                        styles: {
-                            type: Type.ARRAY,
-                            items: {
-                                type: Type.OBJECT,
-                                properties: {
-                                    id: { type: Type.STRING },
-                                    animation: { type: Type.STRING },
-                                    font: { type: Type.STRING },
-                                    color: { type: Type.STRING },
-                                    // Removed backgroundEffect
-                                },
-                                required: ["id", "animation", "font", "color"]
-                            }
-                        }
-                    }
-                }
+  let responseText = "";
+
+  try {
+    const response = await ai.models.generateContent({
+      model: "gemini-2.0-flash-exp",
+      contents: [
+        { text: JSON.stringify(simplifiedLyrics) },
+        { text: prompt }
+      ],
+      config: {
+        responseMimeType: "application/json",
+        safetySettings: [
+          { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
+          { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+          { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
+          { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+        ],
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            styles: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  id: { type: Type.STRING },
+                  animation: { type: Type.STRING },
+                  font: { type: Type.STRING },
+                  color: { type: Type.STRING },
+                  // Removed backgroundEffect
+                },
+                required: ["id", "animation", "font", "color"]
+              }
             }
-        });
-        responseText = response.text || "{}";
-    } catch (e) {
-        console.error("Analyze error", e);
-        return { updatedLyrics: lyrics };
-    }
-
-    // Clean JSON
-    responseText = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
-    const result = JSON.parse(responseText);
-    const styleMap = new Map<string, any>(result.styles?.map((s: any) => [s.id, s]) || []);
-
-    const updatedLyrics = lyrics.map(l => {
-        const aiStyle = styleMap.get(l.id);
-        if (!aiStyle) return l;
-
-        return {
-            ...l,
-            style: {
-                ...l.style,
-                animation: aiStyle.animation as AnimationType,
-                fontFamily: aiStyle.font,
-                color: aiStyle.color,
-                // Preserve existing effects if any
-                effects: l.style.effects || [],
-                backgroundEffect: BackgroundEffect.NONE
-            }
-        };
+          }
+        }
+      }
     });
+    responseText = response.text || "{}";
+  } catch (e) {
+    console.error("Analyze error", e);
+    return { updatedLyrics: lyrics };
+  }
+
+  // Clean JSON
+  responseText = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
+  const result = JSON.parse(responseText);
+  const styleMap = new Map<string, any>(result.styles?.map((s: any) => [s.id, s]) || []);
+
+  const updatedLyrics = lyrics.map(l => {
+    const aiStyle = styleMap.get(l.id);
+    if (!aiStyle) return l;
 
     return {
-        updatedLyrics
+      ...l,
+      style: {
+        ...l.style,
+        animation: aiStyle.animation as AnimationType,
+        fontFamily: aiStyle.font,
+        color: aiStyle.color,
+        // Preserve existing effects if any
+        effects: l.style.effects || [],
+        backgroundEffect: BackgroundEffect.NONE
+      }
     };
+  });
+
+  return {
+    updatedLyrics
+  };
 };
