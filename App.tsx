@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import { Upload, Download, Music, Image as ImageIcon, Loader2, CircleHelp, X, Edit3, FileText, Maximize, Palette, Gamepad2, Video, Check, Trash2, MonitorPlay, Sparkles, BoxSelect, PaintBucket, ChevronDown, ChevronUp, Layers, ScreenShare, Maximize2, ClipboardPaste, Wand2, RotateCcw, GripHorizontal, Eraser, History, Film } from 'lucide-react';
+import { Upload, Download, Music, Image as ImageIcon, Loader2, X, Edit3, FileText, Maximize, Palette, Gamepad2, Video, Check, Trash2, MonitorPlay, Sparkles, BoxSelect, PaintBucket, ChevronDown, ChevronUp, Layers, ScreenShare, Maximize2, ClipboardPaste, Wand2, RotateCcw, GripHorizontal, Eraser, History, Film } from 'lucide-react';
 import VideoPlayer from './components/VideoPlayer';
 import TimelineEditor from './components/TimelineEditor';
 import { generateLyricsFromVideo } from './services/geminiService';
