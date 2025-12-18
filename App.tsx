@@ -1,8 +1,8 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import { Upload, Download, Music, Image as ImageIcon, Loader2, X, Edit3, FileText, Maximize, Palette, Gamepad2, Video, Check, Trash2, MonitorPlay, Sparkles, BoxSelect, PaintBucket, ChevronDown, ChevronUp, Layers, ScreenShare, Maximize2, ClipboardPaste, Wand2, RotateCcw, GripHorizontal, Eraser, History, Film, Key, Settings } from 'lucide-react';
+import { Upload, Download, Music, Image as ImageIcon, Loader2, X, Edit3, FileText, Maximize, Palette, Gamepad2, Video, Check, Trash2, MonitorPlay, Sparkles, BoxSelect, PaintBucket, ChevronDown, ChevronUp, Layers, ScreenShare, Maximize2, ClipboardPaste, RotateCcw, GripHorizontal, Eraser, History, Film, Key, Settings, HelpCircle } from 'lucide-react';
 import VideoPlayer from './components/VideoPlayer';
 import TimelineEditor from './components/TimelineEditor';
-import { generateLyricsFromVideo } from './services/geminiService';
+
 import { LyricSegment, AnimationType, BackgroundEffect, TransitionType } from './types';
 import { saveMedia, saveLyrics, loadProjectData, clearProjectData, ProjectState } from './services/storageService';
 
@@ -59,6 +59,9 @@ function App() {
     // Visual Settings
     const [transitionType, setTransitionType] = useState<TransitionType>(TransitionType.FADE);
     const [smartTextEnabled, setSmartTextEnabled] = useState(true);
+
+    // AI Model State
+    const [userModel, setUserModel] = useState("gemini-1.5-flash");
 
     // API Key State
     const [userApiKey, setUserApiKey] = useState("");
@@ -119,12 +122,15 @@ function App() {
     useEffect(() => {
         const storedKey = localStorage.getItem('lyricflow_api_key');
         if (storedKey) setUserApiKey(storedKey);
+        const storedModel = localStorage.getItem('lyricflow_model_v3');
+        if (storedModel) setUserModel(storedModel);
     }, []);
 
     const handleSaveApiKey = () => {
         localStorage.setItem('lyricflow_api_key', userApiKey);
+        localStorage.setItem('lyricflow_model_v3', userModel);
         setShowSettingsModal(false);
-        alert("APIキーを保存しました");
+        alert("設定を保存しました");
     };
 
     const handleRestoreSession = async (e?: React.MouseEvent) => {
@@ -352,69 +358,8 @@ function App() {
         }
     };
 
-    // --- AI AUTO GENERATION ---
-    const handleAutoGenerateLyrics = async () => {
-        if (!mediaFile) {
-            alert("まずは音楽・動画ファイルをアップロードしてください。");
-            return;
-        }
+    // --- AI TRANSCRIPTION ---
 
-        if (!userApiKey) {
-            alert("AI機能を使用するには設定からAPIキーを入力してください。");
-            setShowSettingsModal(true);
-            return;
-        }
-
-        let textToSync = lyrics.map(l => l.text).join('\n').trim();
-        if (!textToSync && referenceLyrics.trim()) {
-            textToSync = referenceLyrics;
-        }
-
-        const hasText = textToSync.length > 0;
-
-        const confirmMsg = hasText
-            ? "【歌詞同期モード】\n現在のテキストを使用して、AIでタイミングを自動同期します。\n（既存のタイミング情報は上書きされます）"
-            : "【自動書き起こしモード】\nテキストが見つかりません。AIが音声から歌詞を書き起こします。\n（既存の歌詞は上書きされます）";
-
-        if (lyrics.length > 0 && !window.confirm(confirmMsg)) {
-            return;
-        }
-
-        setGenerationStatus("AI準備中...");
-        await new Promise(resolve => setTimeout(resolve, 100));
-
-        try {
-            setIsPlaying(false);
-
-            const result = await generateLyricsFromVideo(
-                userApiKey,
-                mediaFile,
-                textToSync, // Pass the gathered text explicitly
-                null, // Removed audioBuffer usage
-                (status) => setGenerationStatus(status)
-            );
-
-            if (!result || result.length === 0) {
-                throw new Error("AIが歌詞を生成できませんでした。音声が短すぎるか、無音の可能性があります。");
-            }
-
-            setLyrics(result);
-
-            // Sync generated lyrics to text box (User request)
-            const rawText = result.map(l => l.text).join('\n');
-            setReferenceLyrics(rawText);
-
-            setActiveTab('adjust');
-            saveLyrics(result);
-
-            alert("生成完了！\n「微調整」タブでタイミングを確認してください。");
-        } catch (e: any) {
-            console.error("Generate error:", e);
-            alert("生成エラー: " + (e.message || "不明なエラーが発生しました。時間を置いて再試行してください。"));
-        } finally {
-            setGenerationStatus(null);
-        }
-    };
 
     const updateLyric = (id: string, updates: Partial<LyricSegment>) => {
         setLyrics(prev => prev.map(l => l.id === id ? { ...l, ...updates } : l));
@@ -678,10 +623,7 @@ function App() {
                             )}
                         </div>
 
-                        <button onClick={handleAutoGenerateLyrics} className="h-10 px-3 flex items-center justify-center gap-2 rounded-lg border border-transparent bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white shadow-lg shadow-indigo-900/20 transition-all active:scale-95 shrink-0 ml-auto" title="AIで歌詞を自動生成または同期">
-                            <Wand2 size={16} />
-                            <span className="text-xs font-bold whitespace-nowrap">AI自動生成</span>
-                        </button>
+
                     </div>
                     {imageUrls.length > 0 && !isVideoMode && (
                         <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-1">
@@ -721,6 +663,13 @@ function App() {
                         title="APIキー設定"
                     >
                         <Settings size={18} />
+                    </button>
+                    <button
+                        onClick={() => setIsTutorialOpen(true)}
+                        className="p-2 text-zinc-400 hover:text-indigo-400 hover:bg-zinc-800 rounded-lg transition-colors"
+                        title="使い方ガイド"
+                    >
+                        <HelpCircle size={18} />
                     </button>
                     <button
                         onClick={handleResetProject}
@@ -810,6 +759,20 @@ function App() {
                             onChange={(e) => setUserApiKey(e.target.value)}
                         />
 
+                        <div className="flex flex-col gap-2 mt-4 pt-4 border-t border-zinc-800">
+                            <label className="text-sm font-bold text-zinc-300">使用AIモデル</label>
+                            <select
+                                value={userModel}
+                                onChange={(e) => setUserModel(e.target.value)}
+                                className="w-full bg-zinc-950 border border-zinc-700 rounded-lg px-4 py-2 text-white outline-none focus:ring-2 focus:ring-indigo-500"
+                            >
+                                <option value="gemini-1.5-flash">Gemini 1.5 Flash (推奨・安定・高速)</option>
+                                <option value="gemini-2.0-flash-exp">Gemini 2.0 Flash Exp (実験版・高精度)</option>
+                                <option value="gemini-1.5-pro">Gemini 1.5 Pro (最高精度・低速)</option>
+                            </select>
+                            <p className="text-xs text-zinc-500">※エラー（429 Too Many Requests）が出る場合は 1.5 Flash をお試しください。</p>
+                        </div>
+
                         <div className="flex justify-end gap-2 mt-2">
                             <button onClick={() => setShowSettingsModal(false)} className="px-4 py-2 rounded-lg hover:bg-zinc-800 text-zinc-400 font-bold transition-colors">キャンセル</button>
                             <button onClick={handleSaveApiKey} className="px-6 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-bold shadow-lg shadow-indigo-500/20 transition-colors">
@@ -881,8 +844,10 @@ function App() {
                         isPlaying={isPlaying}
                         onTogglePlay={handleTogglePlay}
                         onBulkUpdate={handleBulkUpdate}
+
                         globalOffset={globalOffset}
                         onGlobalOffsetChange={setGlobalOffset}
+                        userModel={userModel}
 
                         headerContent={FileInputs}
                         mode={editorMode}
@@ -955,11 +920,12 @@ function App() {
                 <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
                     <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-2xl max-w-lg w-full shadow-2xl relative animate-[fadeIn_0.3s_ease-out]">
                         <button onClick={() => setIsTutorialOpen(false)} className="absolute top-4 right-4 text-zinc-400 hover:text-white transition-colors"><X size={20} /></button>
-                        <h2 className="text-xl font-bold mb-6 flex items-center gap-2 text-white">使い方ガイド <CircleHelp className="text-indigo-500" size={20} /></h2>
+                        <h2 className="text-xl font-bold mb-6 flex items-center gap-2 text-white">使い方ガイド <HelpCircle className="text-indigo-500" size={20} /></h2>
                         <ul className="space-y-6 text-zinc-300">
                             <li className="flex gap-4"><div className="bg-zinc-800 p-3 rounded-xl h-fit shrink-0"><Music size={20} className="text-zinc-400" /></div><div><span className="font-bold text-white block mb-1">1. 楽曲と画像をアップロード</span><p className="text-sm text-zinc-400">リスト上部のボタンからファイルを選択します。</p></div></li>
-                            <li className="flex gap-4"><div className="bg-indigo-900/30 p-3 rounded-xl h-fit shrink-0"><FileText size={20} className="text-indigo-400" /></div><div><span className="font-bold text-white block mb-1">2. 歌詞の準備</span><p className="text-sm text-zinc-400">テキストを入力し、リズムパッドでタップしてタイミングを合わせます。</p></div></li>
-                            <li className="flex gap-4"><div className="bg-red-900/20 p-3 rounded-xl h-fit shrink-0"><Video size={20} className="text-red-400" /></div><div><span className="font-bold text-white block mb-1">3. 録画して保存</span><p className="text-sm text-zinc-400">「RECモード」を押して、OBSなどの画面録画ソフトでキャプチャしてください。</p></div></li>
+                            <li className="flex gap-4"><div className="bg-indigo-900/30 p-3 rounded-xl h-fit shrink-0"><FileText size={20} className="text-indigo-400" /></div><div><span className="font-bold text-white block mb-1">2. AI文字起こし</span><p className="text-sm text-zinc-400">「AI文字起こし」ボタンで歌詞をテキスト化します（または手動入力）。</p></div></li>
+                            <li className="flex gap-4"><div className="bg-emerald-900/20 p-3 rounded-xl h-fit shrink-0"><MonitorPlay size={20} className="text-emerald-400" /></div><div><span className="font-bold text-white block mb-1">3. TAPで歌詞配置</span><p className="text-sm text-zinc-400">「TAP入力」タブで、曲のリズムに合わせてボタンをタップし、歌詞を配置します。</p></div></li>
+                            <li className="flex gap-4"><div className="bg-red-900/20 p-3 rounded-xl h-fit shrink-0"><Video size={20} className="text-red-400" /></div><div><span className="font-bold text-white block mb-1">4. 録画して保存</span><p className="text-sm text-zinc-400">「RECモード」を押し、OBS等でキャプチャして保存します。</p></div></li>
                         </ul>
                         <button onClick={() => setIsTutorialOpen(false)} className="w-full mt-8 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white rounded-xl font-bold shadow-lg shadow-indigo-500/20 transition-all">作成を始める</button>
                     </div>

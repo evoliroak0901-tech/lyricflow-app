@@ -119,6 +119,7 @@ interface TimelineEditorProps {
 
     audioBuffer?: AudioBuffer | null;
     apiKey: string;
+    userModel: string;
 }
 
 const PPS = 120;
@@ -161,7 +162,8 @@ const TimelineEditor: React.FC<TimelineEditorProps> = ({
 
     isPreviewVisible = true,
     setIsPreviewVisible,
-    apiKey
+    apiKey,
+    userModel
 }) => {
     const listRef = useRef<HTMLDivElement>(null);
     const timelineRef = useRef<HTMLDivElement>(null);
@@ -295,7 +297,7 @@ const TimelineEditor: React.FC<TimelineEditorProps> = ({
         if (isAnalyzing) return;
         setIsAnalyzing(true);
         try {
-            const { updatedLyrics } = await analyzeMoodAndStyle(apiKey, lyrics, (status) => setAnalyzingStatus(status));
+            const { updatedLyrics } = await analyzeMoodAndStyle(apiKey, lyrics, userModel, (status) => setAnalyzingStatus(status));
             updatedLyrics.forEach(l => {
                 onUpdateLyric(l.id, { style: l.style });
             });
